@@ -2,9 +2,124 @@ from flask import request, jsonify, g
 from flask_cors import cross_origin
 from datetime import datetime
 import math
+import sqlite3
 
 def load(app):
-  # todo /study_sessions POST
+
+  @app.route('/api/study-sessions', methods=['POST'])
+  @cross_origin()
+  def create_study_session():
+      # Validate content type
+      if request.content_type != 'application/json':
+          return jsonify({
+              'error': 'Content type must be application/json'
+          }), 400
+
+      # Get request data
+      data = request.get_json()
+      if not data:
+          return jsonify({
+              'error': 'Request body is required'
+          }), 400
+
+      # Required fields
+      required_fields = ['group_id', 'study_activity_id']
+      
+      # Validate required fields
+      missing_fields = [field for field in required_fields if field not in data]
+      if missing_fields:
+          return jsonify({
+              'error': f'Missing required fields: {", ".join(missing_fields)}'
+          }), 400
+
+      # Validate data types
+      try:
+          # Validate IDs are integers
+          group_id = int(data['group_id'])
+          study_activity_id = int(data['study_activity_id'])
+      except ValueError:
+          return jsonify({
+              'error': 'Invalid data format. Check start_time is ISO format and duration is positive number'
+          }), 400
+
+      # If validation passes, continue with database operation
+      try:
+          # Check database connection
+          if not hasattr(app, 'db') or not app.db:
+              return jsonify({
+                  'error': 'Database connection not available',
+                  'error_type': 'ConnectionError'
+              }), 503
+          
+          cursor = app.db.cursor()
+          
+          # Insert new study session
+          try:
+              cursor.execute('''
+                INSERT INTO study_sessions (
+                  group_id, 
+                  study_activity_id,
+                  created_at
+                ) VALUES (?, ?, CURRENT_TIMESTAMP)
+              ''', (
+                  group_id,
+                  study_activity_id
+              ))
+              
+              # Get the auto-generated ID
+              session_id = cursor.lastrowid
+              
+              # Commit the transaction
+              app.db.commit()
+              
+              # Format response data
+              response_data = {
+                  'id': session_id,
+                  'group_id': group_id,
+                  'study_activity_id': study_activity_id,
+                  'created_at': datetime.now().isoformat()
+              }
+              
+              # Create response with headers
+              response = jsonify(response_data)
+              response.headers['Location'] = f'/api/study-sessions/{session_id}'
+              response.status_code = 201
+              
+              return response
+          except sqlite3.IntegrityError as e:
+              # Handle duplicate entry errors
+              if 'UNIQUE constraint failed' in str(e):
+                  return jsonify({
+                      'error': 'Duplicate entry. A study session with these parameters already exists',
+                      'error_type': 'DuplicateEntryError'
+                  }), 409
+              raise
+          except sqlite3.DatabaseError as e:
+              # Handle database errors
+              cursor.connection.rollback()
+              return jsonify({
+                  'error': f'Database error: {str(e)}',
+                  'error_type': 'DatabaseError'
+              }), 500
+          except Exception as e:
+              # Handle other database operation errors
+              cursor.connection.rollback()
+              return jsonify({
+                  'error': f'Database operation failed: {str(e)}',
+                  'error_type': type(e).__name__
+              }), 500
+      except sqlite3.DatabaseError as e:
+          # Handle database connection errors
+          return jsonify({
+              'error': f'Database connection error: {str(e)}',
+              'error_type': 'ConnectionError'
+          }), 503
+      except Exception as e:
+          # Handle generic errors
+          return jsonify({
+              'error': f'An unexpected error occurred: {str(e)}',
+              'error_type': type(e).__name__
+          }), 500
 
   @app.route('/api/study-sessions', methods=['GET'])
   @cross_origin()

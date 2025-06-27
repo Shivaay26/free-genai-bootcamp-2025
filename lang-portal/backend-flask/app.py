@@ -41,6 +41,11 @@ def create_app(test_config=None):
     # Initialize database first since we need it for CORS configuration
     app.db = Db(database=app.config['DATABASE'])
     
+    # Create tables if they don't exist
+    with app.app_context():
+        cursor = app.db.cursor()
+        app.db.setup_tables(cursor)
+    
     # Get allowed origins from study_activities table
     allowed_origins = get_allowed_origins(app)
     
