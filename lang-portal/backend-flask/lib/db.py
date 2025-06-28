@@ -16,6 +16,11 @@ class Db:
   def commit(self):
     self.get().commit()
 
+  def rollback(self):
+    db = self.get()
+    if db:
+      db.rollback()
+
   def cursor(self):
     # Ensure the connection is valid before getting a cursor
     connection = self.get()
