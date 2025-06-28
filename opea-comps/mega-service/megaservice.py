@@ -1,45 +1,56 @@
+from comps import MicroService, ServiceOrchestrator, ServiceType, ServiceRoleType
 import os
-from fastapi import FastAPI
-from comps import MicroService, ServiceOrchestrator, ServiceType
 
-# Dummy values (Assuming the pseudo microservice is running on this port)
+# Service Configuration
 DUMMY_SERVICE_HOST_IP = os.getenv("DUMMY_SERVICE_HOST_IP", "127.0.0.1")
-DUMMY_SERVICE_PORT = int(os.getenv("DUMMY_SERVICE_PORT", 5000))  # Ensure PORT is integer
+DUMMY_SERVICE_PORT = int(os.getenv("DUMMY_SERVICE_PORT", 5000))
 
 class MyFirstMegaService:
     def __init__(self, host="0.0.0.0", port=8000):
         self.host = host
         self.port = port
-        self.app = FastAPI()
         self.megaservice = ServiceOrchestrator()
-        self._setup_routes()
-
-    def _setup_routes(self):
-        @self.app.get("/health")
-        async def health_check():
-            return {"status": "healthy"}
-
-        @self.app.post("/process")
-        async def process_request(data: dict):
-            return await self.megaservice.schedule(data)
+        self.service = None
 
     def add_microservice(self):
         dummy_service = MicroService(
             name="dummy_service",
             host=DUMMY_SERVICE_HOST_IP,
             port=DUMMY_SERVICE_PORT,
-            endpoint="/health",  # Assuming your dummy microservice has a simple health endpoint
+            endpoint="/health",  # Our dummy service has this endpoint
             use_remote_service=True,
-            service_type=ServiceType.LLM,  # Just for example, could be anything
+            service_type=ServiceType.LLM,  # Using LLM as an example
         )
         self.megaservice.add(dummy_service)
 
+    async def handle_request(self, request: dict):
+        # Handle incoming requests
+        result_dict, runtime_graph = await self.megaservice.schedule(
+            initial_inputs=request
+        )
+        return result_dict
+
     def start(self):
-        import uvicorn
         self.add_microservice()
         print(f"🚀 Starting MegaService at {self.host}:{self.port}")
-        uvicorn.run(self.app, host=self.host, port=self.port)
+        
+        # Create a MicroService for our mega service
+        self.service = MicroService(
+            name=self.__class__.__name__,
+            service_role=ServiceRoleType.MEGASERVICE,
+            host=self.host,
+            port=self.port,
+            endpoint="/process",
+            input_datatype=dict,
+            output_datatype=dict,
+        )
+        
+        # Add route handler
+        self.service.add_route("/process", self.handle_request, methods=["POST"])
+        
+        # Start the service
+        self.service.start()
 
 if __name__ == "__main__":
-    service = MyFirstMegaService()
+    service = MyFirstMegaService() 
     service.start()
