@@ -20,8 +20,12 @@ async def echo(request: Request):
         body = await request.body()
         # Convert bytes to string
         body_str = body.decode('utf-8')
-        # Return the same content
-        return body_str
+        # Parse the JSON body
+        body_json = json.loads(body_str)
+        # Return the same content as JSON
+        return body_json
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

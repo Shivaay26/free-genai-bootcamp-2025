@@ -46,10 +46,10 @@ class MyFirstMegaService:
                 response = result_dict[service_key]
                 
                 # If it's a StreamingResponse, get the content
-                if hasattr(response, "body"):
-                    body = await response.body()
-                    logger.info(f"Extracted response body: {body}")
-                    return body
+                # if hasattr(response, "body"):
+                #     body = await response.body()
+                #     logger.info(f"Extracted response body: {body}")
+                #     return body
                 
                 # If it's a regular response, return it directly
                 return response
