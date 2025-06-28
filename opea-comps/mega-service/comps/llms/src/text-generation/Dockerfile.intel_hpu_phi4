@@ -1,0 +1,40 @@
+# Copyright (C) 2024 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+
+# HABANA environment
+FROM vault.habana.ai/gaudi-docker/1.20.1/ubuntu22.04/habanalabs/pytorch-installer-2.6.0 AS hpu
+
+ENV LANG=en_US.UTF-8
+
+RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing \
+    git-lfs \
+    libgl1-mesa-glx \
+    libjemalloc-dev
+
+RUN useradd -m -s /bin/bash user && \
+    mkdir -p /home/user && \
+    mkdir -p /home/user/logs && \
+    chown -R user /home/user/
+
+RUN git lfs install
+
+COPY comps /home/user/comps
+
+ARG uvpip='uv pip install --system --no-cache-dir'
+RUN pip install --no-cache-dir --upgrade pip setuptools uv && \
+    pip install --no-cache-dir --upgrade-strategy eager optimum[habana] && \
+    pip install --no-cache-dir git+https://github.com/HabanaAI/DeepSpeed.git@1.20.0
+
+RUN $uvpip git+https://github.com/huggingface/optimum-habana.git@transformers_future
+
+WORKDIR /home/user/comps/llms/src/text-generation
+RUN $uvpip -r requirements.txt && \
+    $uvpip soundfile peft backoff && \
+    $uvpip numpy==1.26.4 transformers==4.51.3
+
+ENV PYTHONPATH=/root:/home/user
+ENV HABANA_LOGS=/home/user/logs
+
+WORKDIR /home/user/comps/llms/src/text-generation/
+
+ENTRYPOINT ["bash", "entrypoint_phi4.sh"]
